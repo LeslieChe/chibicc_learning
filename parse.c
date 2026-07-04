@@ -1,5 +1,6 @@
 #include "csub.h"
 
+static node_t *expr_stmt(token_t **rest, token_t *tok);
 static node_t *expr(token_t **rest, token_t *tok);
 static node_t *equality(token_t **rest, token_t *tok);
 static node_t *relational(token_t **rest, token_t *tok);
@@ -38,6 +39,21 @@ static node_t *new_num(int val)
 
     // ND_NUM 节点的值存放在 val 中
     node->val = val;
+    return node;
+}
+
+// stmt := expr-stmt
+// 当前语句只有一种：表达式语句
+static node_t *stmt(token_t **rest, token_t *tok)
+{
+    return expr_stmt(rest, tok);
+}
+
+// expr-stmt := expr ";"
+static node_t *expr_stmt(token_t **rest, token_t *tok)
+{
+    node_t *node = new_unary(ND_EXPR_STMT, expr(rest, tok));
+    *rest = match_skip(*rest, ";");
     return node;
 }
 
@@ -150,10 +166,10 @@ static node_t *mul(token_t **rest, token_t *tok)
 static node_t *unary(token_t **rest, token_t *tok)
 {
     if (equal(tok, "+"))
-        return unary(rest, tok->next); // 递归
+        return unary(rest, tok->next);  // 递归
 
     if (equal(tok, "-"))
-        return new_unary(ND_NEG, unary(rest, tok->next)); // 递归
+        return new_unary(ND_NEG, unary(rest, tok->next));  // 递归
 
     return primary(rest, tok);
 }
@@ -176,12 +192,13 @@ static node_t *primary(token_t **rest, token_t *tok)
     error_tok(tok, "expected an expression");
 }
 
+// program := stmt*
+// 程序 := 0 个或者多个 stmt
 node_t *parse(token_t *tok)
 {
-    // expr 是入口函数，解析表达式
-    // 测试的输入必须是表达式
-    node_t *node = expr(&tok, tok);
-    if (tok->kind != TK_EOF)
-        error_tok(tok, "extra token"); // 说明有不合法的 token
-    return node;
+    node_t head = {};
+    node_t *cur = &head;
+    while (tok->kind != TK_EOF) 
+        cur = cur->next = stmt(&tok, tok);
+    return head.next;
 }
