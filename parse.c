@@ -2,6 +2,7 @@
 
 static node_t *expr_stmt(token_t **rest, token_t *tok);
 static node_t *expr(token_t **rest, token_t *tok);
+static node_t *assign(token_t **rest, token_t *tok);
 static node_t *equality(token_t **rest, token_t *tok);
 static node_t *relational(token_t **rest, token_t *tok);
 static node_t *add(token_t **rest, token_t *tok);
@@ -42,6 +43,13 @@ static node_t *new_num(int val)
     return node;
 }
 
+static node_t *new_var_node(char name)
+{
+    node_t *node = new_node(ND_VAR);
+    node->name = name;
+    return node;
+}
+
 // stmt := expr-stmt
 // 当前语句只有一种：表达式语句
 static node_t *stmt(token_t **rest, token_t *tok)
@@ -57,11 +65,44 @@ static node_t *expr_stmt(token_t **rest, token_t *tok)
     return node;
 }
 
-// expr := equality
+// expr := assign  赋值表达式
 static node_t *expr(token_t **rest, token_t *tok)
 {
-    return equality(rest, tok);
+    return assign(rest, tok);
 }
+
+// assign := equality ("=" assign)?
+static node_t *assign(token_t **rest, token_t *tok)
+{
+    node_t *node = equality(&tok, tok);
+    if (equal(tok, "="))
+        node = new_binary(ND_ASSIGN, node, assign(&tok, tok->next));
+    *rest = tok;
+    return node;
+}
+
+// assign := equality ("=" equality)*
+// 上面的产生式是错误的
+
+/*
+下面的写法不对
+赋值表达式的结合性是从右到左
+
+static node_t *assign(token_t **rest, token_t *tok) {
+  node_t *node = equality(&tok, tok);
+  for(;;){
+    if (equal(tok, "=")) {
+        node = new_binary(ND_ASSIGN, node, equality(&tok, tok->next));
+        continue;
+    }
+
+    *rest = tok;
+    return node;
+  }
+}
+*/
+
+
 
 // equality := relational ("==" relational | "!=" relational)*
 static node_t *equality(token_t **rest, token_t *tok)
@@ -183,6 +224,12 @@ static node_t *primary(token_t **rest, token_t *tok)
         return node;
     }
 
+    if (tok->kind == TK_IDENT) {
+        node_t *node = new_var_node(*tok->loc);
+        *rest = tok->next;
+        return node;
+    }
+
     if (tok->kind == TK_NUM) {
         node_t *node = new_num(tok->val);
         *rest = tok->next;
@@ -198,7 +245,6 @@ node_t *parse(token_t *tok)
 {
     node_t head = {};
     node_t *cur = &head;
-    while (tok->kind != TK_EOF) 
-        cur = cur->next = stmt(&tok, tok);
+    while (tok->kind != TK_EOF) cur = cur->next = stmt(&tok, tok);
     return head.next;
 }

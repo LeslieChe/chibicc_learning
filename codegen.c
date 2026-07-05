@@ -14,15 +14,43 @@ static void pop(char *arg)
     depth--;
 }
 
+
+// Compute the absolute address of a given node.
+// It's an error if a given node does not reside in memory.
+// 获得变量的地址
+static void gen_addr(node_t *node) {
+  if (node->kind == ND_VAR) {
+    int offset = (node->name - 'a' + 1) * 8;
+    printf("  lea %d(%%rbp), %%rax\n", -offset);
+    return;
+  }
+
+  error("not an lvalue");
+}
+
 static void gen_expr(node_t *node)
 {
     switch (node->kind) {
         case ND_NUM:
             printf("  mov $%d, %%rax\n", node->val);
             return;
+
         case ND_NEG:
             gen_expr(node->lhs);
             printf("  neg %%rax\n");
+            return;
+
+        case ND_VAR:
+            gen_addr(node);
+            // 把变量的值加载到寄存器 rax 中
+            printf("  mov (%%rax), %%rax\n");
+            return;
+        case ND_ASSIGN:
+            gen_addr(node->lhs);
+            push();
+            gen_expr(node->rhs);
+            pop("%rdi"); // lhs 的地址在 rdi 中，rhs 的值在 rax 中
+            printf("  mov %%rax, (%%rdi)\n");
             return;
     }
 
@@ -82,15 +110,22 @@ static void gen_stmt(node_t *node)
 
 void codegen(node_t *node)
 {
-    if(!node)
+    if (!node)
         return;
-        
+
     printf("  .globl main\n");
     printf("main:\n");
+    // Prologue
+    printf("  push %%rbp\n");
+    printf("  mov %%rsp, %%rbp\n");
+    printf("  sub $208, %%rsp\n");
 
     for (node_t *n = node; n; n = n->next) {
         gen_stmt(n);
         assert(depth == 0);
     }
+
+    printf("  mov %%rbp, %%rsp\n");
+    printf("  pop %%rbp\n");
     printf("  ret\n");  // 返回值在 %rax 中
 }

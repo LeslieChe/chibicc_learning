@@ -11,19 +11,21 @@
 //
 
 typedef enum {
-  TK_PUNCT, // Keywords or punctuators
-  TK_NUM,   // Numeric literals
-  TK_EOF,   // End-of-file markers
+    TK_IDENT,  // Identifiers, single character variable names
+    TK_PUNCT,  // Keywords or punctuators
+    TK_NUM,    // Numeric literals
+    TK_EOF,    // End-of-file markers
 } token_kind_e;
 
 // Token type
-typedef struct token {
-  token_kind_e kind; // Token kind
-  struct token *next;    // Next token
-  int val;        // If kind is TK_NUM, its value
-  char *loc;      // Token location, first character of the token
-  int len;        // Token length
-}token_t;
+typedef struct token
+{
+    token_kind_e kind;   // Token kind
+    struct token *next;  // Next token
+    int val;             // If kind is TK_NUM, its value
+    char *loc;  // Token location, first character of the token
+    int len;    // Token length
+} token_t;
 
 void error(char *fmt, ...);
 void error_at(char *loc, char *fmt, ...);
@@ -37,27 +39,31 @@ token_t *tokenize(char *input);
 //
 
 typedef enum {
-  ND_ADD, // +
-  ND_SUB, // -
-  ND_MUL, // *
-  ND_DIV, // /
-  ND_NEG, // unary -
-  ND_EQ,  // ==
-  ND_NE,  // !=
-  ND_LT,  // <
-  ND_LE,  // <=
-  ND_EXPR_STMT, // Expression statement
-  ND_NUM, // Integer
+    ND_ADD,        // +
+    ND_SUB,        // -
+    ND_MUL,        // *
+    ND_DIV,        // /
+    ND_NEG,        // unary -
+    ND_EQ,         // ==
+    ND_NE,         // !=
+    ND_LT,         // <
+    ND_LE,         // <=
+    ND_ASSIGN,    // =
+    ND_EXPR_STMT,  // Expression statement
+    ND_VAR,       // Variable
+    ND_NUM,        // Integer
 } node_kind_e;
 
 // AST node type
-typedef struct node {
-  node_kind_e kind; // Node kind
-  struct node *next;    // Next node
-  struct node *lhs;     // Left-hand side
-  struct node *rhs;     // Right-hand side
-  int val;       // Used if kind == ND_NUM
-}node_t;
+typedef struct node
+{
+    node_kind_e kind;   // Node kind
+    struct node *next;  // Next node
+    struct node *lhs;   // Left-hand side
+    struct node *rhs;   // Right-hand side
+    char name;          // Used if kind == ND_VAR , variable name (single character)
+    int val;            // Used if kind == ND_NUM
+} node_t;
 
 node_t *parse(token_t *tok);
 

@@ -104,7 +104,7 @@ static int read_punct(char *p)
         return 2;
 
     // 这里已经包含了贪心法则
-    
+
     // 在默认 C
     // 语言环境里通常包含所有可打印的、不是字母也不是数字的标点字符。
     return ispunct(*p) ? 1 : 0;
@@ -145,6 +145,14 @@ token_t *tokenize(char *p)
             continue;
         }
 
+        // Identifier
+        // just support single character variable names
+        // 必须是小写字母
+        if ('a' <= *p && *p <= 'z') {
+            cur = cur->next = new_token(TK_IDENT, p, p + 1);
+            p++;
+            continue;
+        }
         // Punctuators
         int punct_len = read_punct(p);
         if (punct_len) {
