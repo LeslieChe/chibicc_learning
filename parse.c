@@ -1,5 +1,10 @@
 #include "csub.h"
 
+// All local variable instances created during parsing are
+// accumulated to this list.
+obj_t *g_locals;
+
+
 static node_t *expr_stmt(token_t **rest, token_t *tok);
 static node_t *expr(token_t **rest, token_t *tok);
 static node_t *assign(token_t **rest, token_t *tok);
@@ -9,6 +14,14 @@ static node_t *add(token_t **rest, token_t *tok);
 static node_t *mul(token_t **rest, token_t *tok);
 static node_t *unary(token_t **rest, token_t *tok);
 static node_t *primary(token_t **rest, token_t *tok);
+
+// Find a local variable by name.
+static obj_t *find_var(token_t *tok) {
+  for (obj_t *var = g_locals; var; var = var->next)
+    if (strlen(var->name) == tok->len && !strncmp(tok->loc, var->name, tok->len))
+      return var;
+  return NULL;
+}
 
 static node_t *new_node(node_kind_e kind)
 {
@@ -43,11 +56,20 @@ static node_t *new_num(int val)
     return node;
 }
 
-static node_t *new_var_node(char name)
+static node_t *new_var_node(obj_t *var)
 {
     node_t *node = new_node(ND_VAR);
-    node->name = name;
+    node->var = var;
     return node;
+}
+
+
+static obj_t *new_lvar(char *name) {
+  obj_t *var = calloc(1, sizeof(obj_t));
+  var->name = name;
+  var->next = g_locals; // insert to the head of the list
+  g_locals = var;
+  return var;
 }
 
 // stmt := expr-stmt
@@ -225,9 +247,11 @@ static node_t *primary(token_t **rest, token_t *tok)
     }
 
     if (tok->kind == TK_IDENT) {
-        node_t *node = new_var_node(*tok->loc);
+        obj_t *var = find_var(tok);
+        if (!var)
+            var = new_lvar(strndup(tok->loc, tok->len));
         *rest = tok->next;
-        return node;
+        return new_var_node(var);
     }
 
     if (tok->kind == TK_NUM) {
@@ -241,10 +265,18 @@ static node_t *primary(token_t **rest, token_t *tok)
 
 // program := stmt*
 // 程序 := 0 个或者多个 stmt
-node_t *parse(token_t *tok)
+
+function_t *parse(token_t *tok)
 {
     node_t head = {};
     node_t *cur = &head;
-    while (tok->kind != TK_EOF) cur = cur->next = stmt(&tok, tok);
-    return head.next;
+
+    while (tok->kind != TK_EOF) {
+        cur = cur->next = stmt(&tok, tok);
+    }
+
+    function_t *prog = calloc(1, sizeof(function_t));
+    prog->body = head.next;
+    prog->locals = g_locals;
+    return prog;
 }

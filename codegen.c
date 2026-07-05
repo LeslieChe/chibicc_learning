@@ -14,18 +14,24 @@ static void pop(char *arg)
     depth--;
 }
 
+// Round up `n` to the nearest multiple of `align`. For instance,
+// align_to(5, 8) returns 8 and align_to(11, 8) returns 16.
+static int align_to(int n, int align)
+{
+    return (n + align - 1) / align * align;
+}
 
 // Compute the absolute address of a given node.
 // It's an error if a given node does not reside in memory.
 // 获得变量的地址
-static void gen_addr(node_t *node) {
-  if (node->kind == ND_VAR) {
-    int offset = (node->name - 'a' + 1) * 8;
-    printf("  lea %d(%%rbp), %%rax\n", -offset);
-    return;
-  }
+static void gen_addr(node_t *node)
+{
+    if (node->kind == ND_VAR) {
+        printf("  lea %d(%%rbp), %%rax\n", node->var->offset);
+        return;
+    }
 
-  error("not an lvalue");
+    error("not an lvalue");
 }
 
 static void gen_expr(node_t *node)
@@ -108,19 +114,37 @@ static void gen_stmt(node_t *node)
     error("invalid statement");
 }
 
-void codegen(node_t *node)
+/*
+SysV AMD64 ABI 规定：调用 call 指令之前，rsp 必须是 16 的倍数。
+这样进入被调用函数后，返回地址压栈后，函数内的 rsp 变成 8 mod 16，
+再做 push rbp/sub 之后可以正确恢复到 16 对齐。
+16 字节对齐对 SSE/AVX 以及某些库函数的内存访问很重要，
+很多指令（例如 movdqa）要求对齐，或者至少性能更好。
+*/
+// Assign offsets to local variables.
+static void assign_lvar_offsets(function_t *prog) {
+  int offset = 0;
+  for (obj_t *var = prog->locals; var; var = var->next) {
+    offset += 8;
+    var->offset = -offset;
+  }
+  prog->stack_size = align_to(offset, 16);
+}
+
+void codegen(function_t *prog)
 {
-    if (!node)
+    if (!prog)
         return;
 
+    assign_lvar_offsets(prog);
     printf("  .globl main\n");
     printf("main:\n");
     // Prologue
     printf("  push %%rbp\n");
     printf("  mov %%rsp, %%rbp\n");
-    printf("  sub $208, %%rsp\n");
+    printf("  sub $%d, %%rsp\n", prog->stack_size);
 
-    for (node_t *n = node; n; n = n->next) {
+    for (node_t *n = prog->body; n; n = n->next) {
         gen_stmt(n);
         assert(depth == 0);
     }

@@ -7,7 +7,7 @@ int main(int argc, char **argv) {
     error("%s: invalid number of arguments", argv[0]);
 
   token_t *tok = tokenize(argv[1]);
-  node_t *node = parse(tok);
-  codegen(node);
+  function_t *prog = parse(tok);
+  codegen(prog);
   return 0;
 }

@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <assert.h>
 #include <ctype.h>
 #include <stdarg.h>
@@ -55,20 +57,38 @@ typedef enum {
 } node_kind_e;
 
 // AST node type
+typedef struct obj obj_t; // forward declaration
+
 typedef struct node
 {
     node_kind_e kind;   // Node kind
     struct node *next;  // Next node
     struct node *lhs;   // Left-hand side
     struct node *rhs;   // Right-hand side
-    char name;          // Used if kind == ND_VAR , variable name (single character)
+    obj_t *var;         // Used if kind == ND_VAR
     int val;            // Used if kind == ND_NUM
 } node_t;
 
-node_t *parse(token_t *tok);
+
+// Local variable
+
+struct obj {
+  struct obj *next;
+  char *name; // Variable name
+  int offset; // Offset from RBP
+};
+
+// Function
+typedef struct function {
+  node_t *body;
+  obj_t *locals;
+  int stack_size;
+}function_t;
+
+function_t *parse(token_t *tok);
 
 //
 // codegen.c
 //
 
-void codegen(node_t *node);
+void codegen(function_t *prog);
