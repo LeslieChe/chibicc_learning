@@ -55,7 +55,7 @@ static void gen_expr(node_t *node)
             gen_addr(node->lhs);
             push();
             gen_expr(node->rhs);
-            pop("%rdi"); // lhs 的地址在 rdi 中，rhs 的值在 rax 中
+            pop("%rdi");  // lhs 的地址在 rdi 中，rhs 的值在 rax 中
             printf("  mov %%rax, (%%rdi)\n");
             return;
     }
@@ -104,20 +104,22 @@ static void gen_expr(node_t *node)
     error("invalid expression");
 }
 
+static void gen_stmt(node_t *node)
+{
+    switch (node->kind) {
+        case ND_BLOCK:
+            for (node_t *n = node->body; n; n = n->next) gen_stmt(n);
+            return;
+        case ND_RETURN:
+            gen_expr(node->lhs);
+            printf("  jmp .L.return\n");
+            return;
+        case ND_EXPR_STMT:
+            gen_expr(node->lhs);
+            return;
+    }
 
-
-static void gen_stmt(node_t *node) {
-  switch (node->kind) {
-  case ND_RETURN:
-    gen_expr(node->lhs);
-    printf("  jmp .L.return\n");
-    return;
-  case ND_EXPR_STMT:
-    gen_expr(node->lhs);
-    return;
-  }
-
-  error("invalid statement");
+    error("invalid statement");
 }
 
 /*
@@ -128,13 +130,14 @@ SysV AMD64 ABI 规定：调用 call 指令之前，rsp 必须是 16 的倍数。
 很多指令（例如 movdqa）要求对齐，或者至少性能更好。
 */
 // Assign offsets to local variables.
-static void assign_lvar_offsets(function_t *prog) {
-  int offset = 0;
-  for (obj_t *var = prog->locals; var; var = var->next) {
-    offset += 8;
-    var->offset = -offset;
-  }
-  prog->stack_size = align_to(offset, 16);
+static void assign_lvar_offsets(function_t *prog)
+{
+    int offset = 0;
+    for (obj_t *var = prog->locals; var; var = var->next) {
+        offset += 8;
+        var->offset = -offset;
+    }
+    prog->stack_size = align_to(offset, 16);
 }
 
 void codegen(function_t *prog)
@@ -150,11 +153,9 @@ void codegen(function_t *prog)
     printf("  mov %%rsp, %%rbp\n");
     printf("  sub $%d, %%rsp\n", prog->stack_size);
 
-    for (node_t *n = prog->body; n; n = n->next) {
-        gen_stmt(n);
-        assert(depth == 0);
-    }
-    
+    gen_stmt(prog->body);
+    assert(depth == 0);
+
     printf(".L.return:\n");
     printf("  mov %%rbp, %%rsp\n");
     printf("  pop %%rbp\n");

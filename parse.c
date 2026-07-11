@@ -4,7 +4,7 @@
 // accumulated to this list.
 obj_t *g_locals;
 
-
+static node_t *compound_stmt(token_t **rest, token_t *tok);
 static node_t *expr_stmt(token_t **rest, token_t *tok);
 static node_t *expr(token_t **rest, token_t *tok);
 static node_t *assign(token_t **rest, token_t *tok);
@@ -16,11 +16,13 @@ static node_t *unary(token_t **rest, token_t *tok);
 static node_t *primary(token_t **rest, token_t *tok);
 
 // Find a local variable by name.
-static obj_t *find_var(token_t *tok) {
-  for (obj_t *var = g_locals; var; var = var->next)
-    if (strlen(var->name) == tok->len && !strncmp(tok->loc, var->name, tok->len))
-      return var;
-  return NULL;
+static obj_t *find_var(token_t *tok)
+{
+    for (obj_t *var = g_locals; var; var = var->next)
+        if (strlen(var->name) == tok->len &&
+            !strncmp(tok->loc, var->name, tok->len))
+            return var;
+    return NULL;
 }
 
 static node_t *new_node(node_kind_e kind)
@@ -63,29 +65,45 @@ static node_t *new_var_node(obj_t *var)
     return node;
 }
 
-
-static obj_t *new_lvar(char *name) {
-  obj_t *var = calloc(1, sizeof(obj_t));
-  var->name = name;
-  var->next = g_locals; // insert to the head of the list
-  g_locals = var;
-  return var;
+static obj_t *new_lvar(char *name)
+{
+    obj_t *var = calloc(1, sizeof(obj_t));
+    var->name = name;
+    var->next = g_locals;  // insert to the head of the list
+    g_locals = var;
+    return var;
 }
-
 
 // stmt := expr-stmt
+//       | "{" compound-stmt
 //       | "return" expr ";"
-// 表达式语句 | return 语句
-static node_t *stmt(token_t **rest, token_t *tok) {
-  if (equal(tok, "return")) {
-    node_t *node = new_unary(ND_RETURN, expr(&tok, tok->next));
-    *rest = match_skip(tok, ";");
-    return node;
-  }
 
-  return expr_stmt(rest, tok);
+static node_t *stmt(token_t **rest, token_t *tok)
+{
+    if (equal(tok, "return")) {
+        node_t *node = new_unary(ND_RETURN, expr(&tok, tok->next));
+        *rest = match_skip(tok, ";");
+        return node;
+    }
+
+    if (equal(tok, "{"))
+        return compound_stmt(rest, tok->next);
+
+    return expr_stmt(rest, tok);
 }
 
+// compound-stmt := stmt* "}"
+static node_t *compound_stmt(token_t **rest, token_t *tok)
+{
+    node_t head = {};
+    node_t *cur = &head;
+    while (!equal(tok, "}")) cur = cur->next = stmt(&tok, tok);
+
+    node_t *node = new_node(ND_BLOCK);
+    node->body = head.next;
+    *rest = tok->next;
+    return node;
+}
 
 // expr-stmt := expr ";"
 static node_t *expr_stmt(token_t **rest, token_t *tok)
@@ -131,8 +149,6 @@ static node_t *assign(token_t **rest, token_t *tok) {
   }
 }
 */
-
-
 
 // equality := relational ("==" relational | "!=" relational)*
 static node_t *equality(token_t **rest, token_t *tok)
@@ -271,20 +287,12 @@ static node_t *primary(token_t **rest, token_t *tok)
     error_tok(tok, "expected an expression");
 }
 
-// program := stmt*
-// 程序 := 0 个或者多个 stmt
-
+// program := compound-stmt
 function_t *parse(token_t *tok)
 {
-    node_t head = {};
-    node_t *cur = &head;
-
-    while (tok->kind != TK_EOF) {
-        cur = cur->next = stmt(&tok, tok);
-    }
-
+    tok = match_skip(tok, "{");
     function_t *prog = calloc(1, sizeof(function_t));
-    prog->body = head.next;
+    prog->body = compound_stmt(&tok, tok);
     prog->locals = g_locals;
     return prog;
 }
