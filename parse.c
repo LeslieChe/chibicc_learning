@@ -72,12 +72,20 @@ static obj_t *new_lvar(char *name) {
   return var;
 }
 
+
 // stmt := expr-stmt
-// 当前语句只有一种：表达式语句
-static node_t *stmt(token_t **rest, token_t *tok)
-{
-    return expr_stmt(rest, tok);
+//       | "return" expr ";"
+// 表达式语句 | return 语句
+static node_t *stmt(token_t **rest, token_t *tok) {
+  if (equal(tok, "return")) {
+    node_t *node = new_unary(ND_RETURN, expr(&tok, tok->next));
+    *rest = match_skip(tok, ";");
+    return node;
+  }
+
+  return expr_stmt(rest, tok);
 }
+
 
 // expr-stmt := expr ";"
 static node_t *expr_stmt(token_t **rest, token_t *tok)
