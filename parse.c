@@ -75,6 +75,7 @@ static obj_t *new_lvar(char *name)
 }
 
 // stmt := expr-stmt
+//       | "if" "(" expr ")" stmt ("else" stmt)?
 //       | "{" compound-stmt
 //       | "return" expr ";"
 
@@ -83,6 +84,18 @@ static node_t *stmt(token_t **rest, token_t *tok)
     if (equal(tok, "return")) {
         node_t *node = new_unary(ND_RETURN, expr(&tok, tok->next));
         *rest = match_skip(tok, ";");
+        return node;
+    }
+
+    if (equal(tok, "if")) {
+        node_t *node = new_node(ND_IF);
+        tok = match_skip(tok->next, "(");
+        node->cond = expr(&tok, tok);
+        tok = match_skip(tok, ")");
+        node->then = stmt(&tok, tok);
+        if (equal(tok, "else"))
+            node->els = stmt(&tok, tok->next);
+        *rest = tok;
         return node;
     }
 
