@@ -76,6 +76,7 @@ static obj_t *new_lvar(char *name)
 
 // stmt := expr-stmt
 //       | "if" "(" expr ")" stmt ("else" stmt)?
+//       | "for" "(" expr-stmt expr? ";" expr? ")" stmt
 //       | "{" compound-stmt
 //       | "return" expr ";"
 
@@ -96,6 +97,25 @@ static node_t *stmt(token_t **rest, token_t *tok)
         if (equal(tok, "else"))
             node->els = stmt(&tok, tok->next);
         *rest = tok;
+        return node;
+    }
+
+    //    "for" "(" expr-stmt expr? ";" expr? ")" stmt
+    if (equal(tok, "for")) {
+        node_t *node = new_node(ND_FOR);
+        tok = match_skip(tok->next, "(");
+
+        node->init = expr_stmt(&tok, tok);
+
+        if (!equal(tok, ";"))
+            node->cond = expr(&tok, tok);
+        tok = match_skip(tok, ";");
+
+        if (!equal(tok, ")"))
+            node->inc = expr(&tok, tok);
+        tok = match_skip(tok, ")");
+
+        node->then = stmt(rest, tok);
         return node;
     }
 
