@@ -105,9 +105,21 @@ static node_t *compound_stmt(token_t **rest, token_t *tok)
     return node;
 }
 
-// expr-stmt := expr ";"
+// expr-stmt := expr? ";"
+/*
+    我的理解：
+    C 语言里空语句 `;` 和空块 `{}` 语义接近：都代表 “什么都不执行”。
+    编译器作者在这里做了一层统一：遇到裸分号，直接用空块节点表示，
+    后续 IR / 代码生成、语义分析不用单独写一套「空语句」逻辑，
+    复用空块的处理逻辑。
+*/
 static node_t *expr_stmt(token_t **rest, token_t *tok)
 {
+    if (equal(tok, ";")) {
+        *rest = tok->next;
+        return new_node(ND_BLOCK);  // ; 等同于 {}
+    }
+
     node_t *node = new_unary(ND_EXPR_STMT, expr(rest, tok));
     *rest = match_skip(*rest, ";");
     return node;
@@ -287,7 +299,7 @@ static node_t *primary(token_t **rest, token_t *tok)
     error_tok(tok, "expected an expression");
 }
 
-// program := compound-stmt
+// program := { compound-stmt
 function_t *parse(token_t *tok)
 {
     tok = match_skip(tok, "{");
