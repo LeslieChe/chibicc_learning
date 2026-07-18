@@ -310,7 +310,7 @@ static node_t *mul(token_t **rest, token_t *tok)
     }
 }
 
-// unary = ("+" | "-") unary
+// unary = ("+" | "-" | "*" | "&") unary
 //       | primary
 static node_t *unary(token_t **rest, token_t *tok)
 {
@@ -318,8 +318,14 @@ static node_t *unary(token_t **rest, token_t *tok)
         return unary(rest, tok->next);  // 递归
 
     if (equal(tok, "-"))
-        return new_unary(ND_NEG, unary(rest, tok->next), tok);  // 递归
+        return new_unary(ND_NEG, unary(rest, tok->next),
+                         tok);  // 递归
 
+    if (equal(tok, "&"))
+        return new_unary(ND_ADDR, unary(rest, tok->next), tok);
+
+    if (equal(tok, "*"))
+        return new_unary(ND_DEREF, unary(rest, tok->next), tok);
     return primary(rest, tok);
 }
 

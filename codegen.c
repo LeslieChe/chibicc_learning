@@ -1,7 +1,7 @@
 #include "csub.h"
 
 static int depth;
-
+static void gen_expr(node_t *node);
 static int count(void) {
   static int i = 1;
   return i++;
@@ -30,12 +30,15 @@ static int align_to(int n, int align)
 // 获得变量的地址
 static void gen_addr(node_t *node)
 {
-    if (node->kind == ND_VAR) {
-        printf("  lea %d(%%rbp), %%rax\n", node->var->offset);
-        return;
+    switch (node->kind) {
+        case ND_VAR:
+            printf("  lea %d(%%rbp), %%rax\n", node->var->offset);
+            return;
+        case ND_DEREF:
+            gen_expr(node->lhs);
+            return;
     }
     error_tok(node->tok, "not an lvalue");
-    
 }
 
 static void gen_expr(node_t *node)
@@ -55,6 +58,15 @@ static void gen_expr(node_t *node)
             // 把变量的值加载到寄存器 rax 中
             printf("  mov (%%rax), %%rax\n");
             return;
+
+        case ND_DEREF:
+            gen_expr(node->lhs);
+            printf("  mov (%%rax), %%rax\n");
+            return;
+        case ND_ADDR:
+            gen_addr(node->lhs);
+            return;
+
         case ND_ASSIGN:
             gen_addr(node->lhs);
             push();
@@ -105,7 +117,7 @@ static void gen_expr(node_t *node)
             return;
     }
 
-    error("invalid expression");
+     error_tok(node->tok, "invalid expression");
 }
 
 static void gen_stmt(node_t *node)
@@ -155,7 +167,7 @@ static void gen_stmt(node_t *node)
             return;
     }
 
-    error("invalid statement");
+     error_tok(node->tok, "invalid statement");
 }
 
 /*
