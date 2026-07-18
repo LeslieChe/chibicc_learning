@@ -68,6 +68,7 @@ typedef struct node
 {
     node_kind_e kind;   // Node kind
     struct node *next;  // Next node
+    token_t *tok;    // Representative token   暂时不理解
     struct node *lhs;   // Left-hand side
     struct node *rhs;   // Right-hand side
 

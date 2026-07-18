@@ -34,8 +34,8 @@ static void gen_addr(node_t *node)
         printf("  lea %d(%%rbp), %%rax\n", node->var->offset);
         return;
     }
-
-    error("not an lvalue");
+    error_tok(node->tok, "not an lvalue");
+    
 }
 
 static void gen_expr(node_t *node)
