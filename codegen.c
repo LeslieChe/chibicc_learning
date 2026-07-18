@@ -125,9 +125,10 @@ static void gen_stmt(node_t *node)
             return;
         }
 
-        case ND_FOR: {
+        case ND_FOR: {  // and while are both implemented as for loops
             int c = count();
-            gen_stmt(node->init);
+            if (node->init)
+                gen_stmt(node->init);
             printf(".L.begin.%d:\n", c);
             if (node->cond) {
                 gen_expr(node->cond);
@@ -141,7 +142,7 @@ static void gen_stmt(node_t *node)
             printf(".L.end.%d:\n", c);
             return;
         }
-        
+
         case ND_BLOCK:
             for (node_t *n = node->body; n; n = n->next) gen_stmt(n);
             return;
