@@ -37,6 +37,7 @@ void error_at(char *loc, char *fmt, ...);
 void error_tok(token_t *tok, char *fmt, ...);
 bool equal(token_t *tok, char *op);
 token_t *match_skip(token_t *tok, char *op);
+bool consume(token_t **rest, token_t *tok, char *str);
 token_t *tokenize(char *input);
 
 //
@@ -94,6 +95,7 @@ typedef struct node
 struct obj {
   struct obj *next;
   char *name; // Variable name
+  type_t *ty; // Type
   int offset; // Offset from RBP
 };
 
@@ -119,11 +121,14 @@ typedef enum {
 struct type {
   type_kind_e kind;
   struct type *base;
+   // Declaration
+  token_t *name; // 暂时不理解
 };
 
 extern struct type *ty_int;
 
 bool is_integer(struct type *ty);
+type_t *pointer_to(type_t *base);
 void add_type(struct node *node);
 
 //

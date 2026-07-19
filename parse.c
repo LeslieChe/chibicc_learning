@@ -67,13 +67,86 @@ static node_t *new_var_node(obj_t *var, token_t *tok)
     return node;
 }
 
-static obj_t *new_lvar(char *name)
+static obj_t *new_lvar(char *name, type_t *ty)
 {
     obj_t *var = calloc(1, sizeof(obj_t));
     var->name = name;
+    var->ty = ty;
     var->next = g_locals;  // insert to the head of the list
     g_locals = var;
     return var;
+}
+
+static char *get_ident(token_t *tok) {
+  if (tok->kind != TK_IDENT)
+    error_tok(tok, "expected an identifier");
+  return strndup(tok->loc, tok->len);
+}
+
+
+// declspec = "int"
+static type_t *declspec(token_t **rest, token_t *tok) {
+  *rest = match_skip(tok, "int");
+  return ty_int;
+}
+
+
+// declarator = "*"* ident
+static type_t *declarator(token_t **rest, token_t *tok, type_t *ty) {
+  while (consume(&tok, tok, "*"))
+    ty = pointer_to(ty);
+
+  if (tok->kind != TK_IDENT)
+    error_tok(tok, "expected a variable name");
+
+  ty->name = tok; // 暂存名字
+  *rest = tok->next;
+  return ty;
+}
+
+
+
+// declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
+/*
+    最外层是 declspec “;”
+    declspec 目前只有一种类型：int
+    标识符可以省略, 例如： int;
+    declarator 可以是 0 到多个 *，然后是标识符
+    ("=" expr) 是初始化式，可选
+    如果一次声明多个变量，则用逗号分隔，所以有 
+    ("," declarator ("=" expr)?)*
+    
+*/
+static node_t *declaration(token_t **rest, token_t *tok) {
+  type_t *base_ty = declspec(&tok, tok);
+
+  node_t head = {};
+  node_t *cur = &head;
+  int i = 0;
+
+  while (!equal(tok, ";")) {
+    if (i++ > 0)
+      tok = match_skip(tok, ",");
+
+    type_t *ty = declarator(&tok, tok, base_ty);
+    obj_t *var = new_lvar(get_ident(ty->name), ty);
+
+    if (!equal(tok, "="))
+      continue;
+
+    node_t *lhs = new_var_node(var, ty->name);
+    node_t *rhs = assign(&tok, tok->next);
+    node_t *node = new_binary(ND_ASSIGN, lhs, rhs, tok);
+
+    // 这里把初始化语句当作一个表达式语句来处理，放在 ND_EXPR_STMT 节点中
+    cur = cur->next = new_unary(ND_EXPR_STMT, node, tok);
+  }
+
+  // 多个声明语句（逗号分隔）被包装在一个 ND_BLOCK 节点中
+  node_t *node = new_node(ND_BLOCK, tok);
+  node->body = head.next;
+  *rest = tok->next;
+  return node;
 }
 
 // stmt := expr-stmt
@@ -138,14 +211,18 @@ static node_t *stmt(token_t **rest, token_t *tok)
     return expr_stmt(rest, tok);
 }
 
-// compound-stmt := stmt* "}"
+// compound-stmt := (declaration | stmt)* "}"
 static node_t *compound_stmt(token_t **rest, token_t *tok)
 {
     node_t *node = new_node(ND_BLOCK, tok); // 我感觉第二个参数没有意义
     node_t head = {};
     node_t *cur = &head;
     while (!equal(tok, "}")) {
-        cur = cur->next = stmt(&tok, tok);
+        if (equal(tok, "int")) {
+            cur = cur->next = declaration(&tok, tok);
+        } else {
+            cur = cur->next = stmt(&tok, tok);
+        }
         add_type(cur);
     }
     
@@ -399,7 +476,7 @@ static node_t *primary(token_t **rest, token_t *tok)
     if (tok->kind == TK_IDENT) {
         obj_t *var = find_var(tok);
         if (!var)
-            var = new_lvar(strndup(tok->loc, tok->len));
+            error_tok(tok, "undefined variable");
         *rest = tok->next;
         return new_var_node(var, tok);
     }
