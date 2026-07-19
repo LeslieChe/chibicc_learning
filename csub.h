@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+typedef struct type type_t; // forward declaration
+
 //
 // tokenize.c
 //
@@ -70,6 +72,7 @@ typedef struct node
 {
     node_kind_e kind;   // Node kind
     struct node *next;  // Next node
+    type_t *ty;
     token_t *tok;    // Representative token   暂时不理解
     struct node *lhs;   // Left-hand side
     struct node *rhs;   // Right-hand side
@@ -102,6 +105,26 @@ typedef struct function {
 }function_t;
 
 function_t *parse(token_t *tok);
+
+
+//
+// type.c
+//
+
+typedef enum {
+  TY_INT,
+  TY_PTR,
+} type_kind_e;
+
+struct type {
+  type_kind_e kind;
+  struct type *base;
+};
+
+extern struct type *ty_int;
+
+bool is_integer(struct type *ty);
+void add_type(struct node *node);
 
 //
 // codegen.c

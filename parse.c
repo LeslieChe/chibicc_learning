@@ -144,7 +144,11 @@ static node_t *compound_stmt(token_t **rest, token_t *tok)
     node_t *node = new_node(ND_BLOCK, tok); // 我感觉第二个参数没有意义
     node_t head = {};
     node_t *cur = &head;
-    while (!equal(tok, "}")) cur = cur->next = stmt(&tok, tok);
+    while (!equal(tok, "}")) {
+        cur = cur->next = stmt(&tok, tok);
+        add_type(cur);
+    }
+    
 
     node->body = head.next;
     *rest = tok->next;
@@ -265,6 +269,60 @@ static node_t *relational(token_t **rest, token_t *tok)
     }
 }
 
+
+
+static node_t *new_add(node_t *lhs, node_t *rhs, token_t *tok) {
+  add_type(lhs);
+  add_type(rhs);
+
+  // num + num
+  if (is_integer(lhs->ty) && is_integer(rhs->ty))
+    return new_binary(ND_ADD, lhs, rhs, tok);
+
+  if (lhs->ty->base && rhs->ty->base) // 两个指针相加
+    error_tok(tok, "invalid operands");
+
+  // Canonicalize `num + ptr` to `ptr + num`.
+  if (!lhs->ty->base && rhs->ty->base) { // 交换 lhs 和 rhs
+    node_t *tmp = lhs;
+    lhs = rhs;
+    rhs = tmp;
+  }
+
+  // ptr + num
+  rhs = new_binary(ND_MUL, rhs, new_num(8, tok), tok); // 这里认为指针指向的都是 8 字节的类型
+  return new_binary(ND_ADD, lhs, rhs, tok);
+}
+
+// Like `+`, `-` is overloaded for the pointer type.
+static node_t *new_sub(node_t *lhs, node_t *rhs, token_t *tok) {
+  add_type(lhs);
+  add_type(rhs);
+
+  // num - num
+  if (is_integer(lhs->ty) && is_integer(rhs->ty))
+    return new_binary(ND_SUB, lhs, rhs, tok);
+
+  // ptr - num
+  if (lhs->ty->base && is_integer(rhs->ty)) {
+    rhs = new_binary(ND_MUL, rhs, new_num(8, tok), tok);
+    add_type(rhs);
+    node_t *node = new_binary(ND_SUB, lhs, rhs, tok);
+    node->ty = lhs->ty;
+    return node;
+  }
+
+  // ptr - ptr, which returns how many elements are between the two.
+  if (lhs->ty->base && rhs->ty->base) {
+    node_t *node = new_binary(ND_SUB, lhs, rhs, tok);
+    node->ty = ty_int;
+    return new_binary(ND_DIV, node, new_num(8, tok), tok);
+  }
+
+  error_tok(tok, "invalid operands");
+}
+
+
 // add := mul ("+" mul | "-" mul)*
 // mul 是乘性表达式
 static node_t *add(token_t **rest, token_t *tok)
@@ -274,12 +332,12 @@ static node_t *add(token_t **rest, token_t *tok)
     for (;;) {
         token_t *start = tok;
         if (equal(tok, "+")) {
-            node = new_binary(ND_ADD, node, mul(&tok, tok->next), tok);
+            node =  new_add(node, mul(&tok, tok->next), tok);
             continue;
         }
 
         if (equal(tok, "-")) {
-            node = new_binary(ND_SUB, node, mul(&tok, tok->next), tok);
+            node = new_sub(node, mul(&tok, tok->next), tok);
             continue;
         }
 
