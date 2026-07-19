@@ -464,7 +464,8 @@ static node_t *unary(token_t **rest, token_t *tok)
     return primary(rest, tok);
 }
 
-// primary = "(" expr ")" | num
+// primary := "(" expr ")" | ident args? | num
+// args := "(" ")"
 static node_t *primary(token_t **rest, token_t *tok)
 {
     if (equal(tok, "(")) {
@@ -474,6 +475,15 @@ static node_t *primary(token_t **rest, token_t *tok)
     }
 
     if (tok->kind == TK_IDENT) {
+        // Function call
+        if (equal(tok->next, "(")) {
+            node_t *node = new_node(ND_FUNCALL, tok);
+            node->funcname = strndup(tok->loc, tok->len);
+            *rest = match_skip(tok->next->next, ")");
+            return node;
+        }
+
+        // Variable
         obj_t *var = find_var(tok);
         if (!var)
             error_tok(tok, "undefined variable");

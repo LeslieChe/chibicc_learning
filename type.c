@@ -46,6 +46,7 @@ void add_type(node_t *node) {
   case ND_LE:
   case ND_VAR: // 目前只有整型变量
   case ND_NUM:
+  case ND_FUNCALL: // 函数返回值是整型
     node->ty = ty_int;
     return;
   case ND_ADDR:

@@ -74,6 +74,11 @@ static void gen_expr(node_t *node)
             pop("%rdi");  // lhs 的地址在 rdi 中，rhs 的值在 rax 中
             printf("  mov %%rax, (%%rdi)\n");
             return;
+
+        case ND_FUNCALL:
+            printf("  mov $0, %%rax\n"); // 这是传参吗?
+            printf("  call %s\n", node->funcname);
+            return;
     }
 
     gen_expr(node->rhs);
