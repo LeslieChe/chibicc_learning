@@ -1,6 +1,21 @@
 #include "csub.h"
 
 static int depth;
+/*
+System V AMD64 ABI（Application Binary
+Interface）规定了函数调用的约定，
+包括参数传递、返回值处理、栈帧布局等。
+根据该规范，函数调用时，前六个整数或指针类型的参数会通过寄存器传递，
+而不是通过栈。这些寄存器分别是：
+1. %rdi - 用于传递第一个参数
+2. %rsi - 用于传递第二个参数
+3. %rdx - 用于传递第三个参数
+4. %rcx - 用于传递第四个参数
+5. %r8  - 用于传递第五个参数
+6. %r9  - 用于传递第六个参数
+如果函数有超过六个参数，剩余的参数会通过栈传递。
+*/
+static char *arg_reg[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
 static void gen_expr(node_t *node);
 static int count(void) {
   static int i = 1;
@@ -74,11 +89,21 @@ static void gen_expr(node_t *node)
             pop("%rdi");  // lhs 的地址在 rdi 中，rhs 的值在 rax 中
             printf("  mov %%rax, (%%rdi)\n");
             return;
+        case ND_FUNCALL: {
+            int nargs = 0;
+            for (node_t *arg = node->args; arg; arg = arg->next) {
+                gen_expr(arg);
+                push();
+                nargs++;
+            }
 
-        case ND_FUNCALL:
-            printf("  mov $0, %%rax\n"); // 这是传参吗?
+            for (int i = nargs - 1; i >= 0; i--) 
+                pop(arg_reg[i]);
+
+            printf("  mov $0, %%rax\n");  // 似乎没有必要
             printf("  call %s\n", node->funcname);
             return;
+        }
     }
 
     gen_expr(node->rhs);

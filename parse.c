@@ -464,8 +464,33 @@ static node_t *unary(token_t **rest, token_t *tok)
     return primary(rest, tok);
 }
 
+/*
+    已经判断是 ident “(” 了
+*/
+// funcall := ident "(" (assign ("," assign)*)? ")"
+static node_t *funcall(token_t **rest, token_t *tok) {
+  token_t *start = tok; // 函数名字
+  tok = tok->next->next; // 跳过 ident 和 "("
+
+  node_t head = {};
+  node_t *cur = &head;
+
+  while (!equal(tok, ")")) {
+    // 收集 actural parameters
+    if (cur != &head) // 不是第一个参数，跳过逗号
+      tok = match_skip(tok, ",");
+    cur = cur->next = assign(&tok, tok);
+  }
+
+  *rest = match_skip(tok, ")");
+
+  node_t *node = new_node(ND_FUNCALL, start);
+  node->funcname = strndup(start->loc, start->len);
+  node->args = head.next;
+  return node;
+}
+
 // primary := "(" expr ")" | ident args? | num
-// args := "(" ")"
 static node_t *primary(token_t **rest, token_t *tok)
 {
     if (equal(tok, "(")) {
@@ -476,12 +501,8 @@ static node_t *primary(token_t **rest, token_t *tok)
 
     if (tok->kind == TK_IDENT) {
         // Function call
-        if (equal(tok->next, "(")) {
-            node_t *node = new_node(ND_FUNCALL, tok);
-            node->funcname = strndup(tok->loc, tok->len);
-            *rest = match_skip(tok->next->next, ")");
-            return node;
-        }
+        if (equal(tok->next, "("))
+            return funcall(rest, tok);
 
         // Variable
         obj_t *var = find_var(tok);

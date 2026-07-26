@@ -90,6 +90,7 @@ typedef struct node
 
     // Function call
     char *funcname;
+    struct node *args;  // actural parameters
 
     obj_t *var;         // Used if kind == ND_VAR
     int val;            // Used if kind == ND_NUM
