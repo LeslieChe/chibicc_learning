@@ -8,18 +8,18 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct type type_t; // forward declaration
+typedef struct type type_t;  // forward declaration
 
 //
 // tokenize.c
 //
 
 typedef enum {
-    TK_IDENT,  // Identifiers, single character variable names
-    TK_PUNCT,  // Keywords or punctuators
-    TK_KEYWORD, // Keywords
-    TK_NUM,    // Numeric literals
-    TK_EOF,    // End-of-file markers
+    TK_IDENT,    // Identifiers, single character variable names
+    TK_PUNCT,    // Keywords or punctuators
+    TK_KEYWORD,  // Keywords
+    TK_NUM,      // Numeric literals
+    TK_EOF,      // End-of-file markers
 } token_kind_e;
 
 // Token type
@@ -54,30 +54,30 @@ typedef enum {
     ND_NE,         // !=
     ND_LT,         // <
     ND_LE,         // <=
-    ND_ASSIGN,    // =
-    ND_ADDR,      // unary &
-    ND_DEREF,     // unary *
-    ND_RETURN,    // "return"
-    ND_IF,        // "if"
-    ND_FOR,       // // "for" or "while"
-    ND_BLOCK,     // { ... }
-    ND_FUNCALL,   // Function call
+    ND_ASSIGN,     // =
+    ND_ADDR,       // unary &
+    ND_DEREF,      // unary *
+    ND_RETURN,     // "return"
+    ND_IF,         // "if"
+    ND_FOR,        // // "for" or "while"
+    ND_BLOCK,      // { ... }
+    ND_FUNCALL,    // Function call
     ND_EXPR_STMT,  // Expression statement
-    ND_VAR,       // Variable
+    ND_VAR,        // Variable
     ND_NUM,        // Integer
 } node_kind_e;
 
 // AST node type
-typedef struct obj obj_t; // forward declaration
+typedef struct obj obj_t;  // forward declaration
 
 typedef struct node
 {
     node_kind_e kind;   // Node kind
     struct node *next;  // Next node
     type_t *ty;
-    token_t *tok;    // Representative token   暂时不理解
-    struct node *lhs;   // Left-hand side
-    struct node *rhs;   // Right-hand side
+    token_t *tok;      // Representative token   暂时不理解
+    struct node *lhs;  // Left-hand side
+    struct node *rhs;  // Right-hand side
 
     // "if" or "for" statement
     struct node *cond;  // if or for condition
@@ -92,43 +92,51 @@ typedef struct node
     char *funcname;
     struct node *args;  // actural parameters
 
-    obj_t *var;         // Used if kind == ND_VAR
-    int val;            // Used if kind == ND_NUM
+    obj_t *var;  // Used if kind == ND_VAR
+    int val;     // Used if kind == ND_NUM
 } node_t;
 
 // Local variable
 
-struct obj {
-  struct obj *next;
-  char *name; // Variable name
-  type_t *ty; // Type
-  int offset; // Offset from RBP
+struct obj
+{
+    struct obj *next;
+    char *name;  // Variable name
+    type_t *ty;  // Type
+    int offset;  // Offset from RBP
 };
 
 // Function
-typedef struct function {
-  node_t *body;
-  obj_t *locals;
-  int stack_size;
-}function_t;
+typedef struct function
+{
+    struct function *next;
+    char *name;
+    node_t *body;
+    obj_t *locals;
+    int stack_size;
+} function_t;
 
 function_t *parse(token_t *tok);
-
 
 //
 // type.c
 //
 
 typedef enum {
-  TY_INT,
-  TY_PTR,
+    TY_INT,
+    TY_PTR,
+    TY_FUNC,
 } type_kind_e;
 
-struct type {
-  type_kind_e kind;
-  struct type *base;
-   // Declaration
-  token_t *name; // 暂时不理解
+struct type
+{
+    type_kind_e kind;
+    struct type *base;
+    // Declaration
+    token_t *name;  // 暂存名字
+
+    // Function type
+    type_t *return_ty;
 };
 
 extern struct type *ty_int;
@@ -136,7 +144,7 @@ extern struct type *ty_int;
 bool is_integer(struct type *ty);
 type_t *pointer_to(type_t *base);
 void add_type(struct node *node);
-
+type_t *func_type(type_t *return_ty);
 //
 // codegen.c
 //

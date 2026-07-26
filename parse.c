@@ -33,7 +33,8 @@ static node_t *new_node(node_kind_e kind, token_t *tok)
     return node;
 }
 
-static node_t *new_binary(node_kind_e kind, node_t *lhs, node_t *rhs, token_t *tok)
+static node_t *new_binary(node_kind_e kind, node_t *lhs, node_t *rhs,
+                          token_t *tok)
 {
     node_t *node = new_node(kind, tok);
     node->lhs = lhs;
@@ -77,76 +78,91 @@ static obj_t *new_lvar(char *name, type_t *ty)
     return var;
 }
 
-static char *get_ident(token_t *tok) {
-  if (tok->kind != TK_IDENT)
-    error_tok(tok, "expected an identifier");
-  return strndup(tok->loc, tok->len);
+static char *get_ident(token_t *tok)
+{
+    if (tok->kind != TK_IDENT)
+        error_tok(tok, "expected an identifier");
+    return strndup(tok->loc, tok->len);
 }
-
 
 // declspec = "int"
-static type_t *declspec(token_t **rest, token_t *tok) {
-  *rest = match_skip(tok, "int");
-  return ty_int;
+static type_t *declspec(token_t **rest, token_t *tok)
+{
+    *rest = match_skip(tok, "int");
+    return ty_int;
 }
 
-
-// declarator = "*"* ident
-static type_t *declarator(token_t **rest, token_t *tok, type_t *ty) {
-  while (consume(&tok, tok, "*"))
-    ty = pointer_to(ty);
-
-  if (tok->kind != TK_IDENT)
-    error_tok(tok, "expected a variable name");
-
-  ty->name = tok; // 暂存名字
-  *rest = tok->next;
-  return ty;
+// type-suffix := ("(" func-params)?
+// ty 是函数的返回值类型
+// 目前仅支持无参数函数的定义
+static type_t *type_suffix(token_t **rest, token_t *tok, type_t *ty)
+{
+    if (equal(tok, "(")) {
+        *rest = match_skip(tok->next, ")");
+        return func_type(ty);
+    }
+    *rest = tok;
+    return ty;
 }
 
+// declarator = "*"* ident type-suffix
+static type_t *declarator(token_t **rest, token_t *tok, type_t *ty)
+{
+    while (consume(&tok, tok, "*")) ty = pointer_to(ty);
 
+    if (tok->kind != TK_IDENT)
+        error_tok(tok, "expected a variable name");
 
-// declaration = declspec (declarator ("=" expr)? ("," declarator ("=" expr)?)*)? ";"
+    ty = type_suffix(rest, tok->next, ty);
+    ty->name = tok;  // 暂存名字
+
+    return ty;
+}
+
+// declaration = declspec (declarator ("=" expr)? ("," declarator ("="
+// expr)?)*)? ";"
 /*
     最外层是 declspec “;”
     declspec 目前只有一种类型：int
     标识符可以省略, 例如： int;
     declarator 可以是 0 到多个 *，然后是标识符
     ("=" expr) 是初始化式，可选
-    如果一次声明多个变量，则用逗号分隔，所以有 
+    如果一次声明多个变量，则用逗号分隔，所以有
     ("," declarator ("=" expr)?)*
-    
+
 */
-static node_t *declaration(token_t **rest, token_t *tok) {
-  type_t *base_ty = declspec(&tok, tok);
+static node_t *declaration(token_t **rest, token_t *tok)
+{
+    type_t *base_ty = declspec(&tok, tok);
 
-  node_t head = {};
-  node_t *cur = &head;
-  int i = 0;
+    node_t head = {};
+    node_t *cur = &head;
+    int i = 0;
 
-  while (!equal(tok, ";")) {
-    if (i++ > 0)
-      tok = match_skip(tok, ",");
+    while (!equal(tok, ";")) {
+        if (i++ > 0)
+            tok = match_skip(tok, ",");
 
-    type_t *ty = declarator(&tok, tok, base_ty);
-    obj_t *var = new_lvar(get_ident(ty->name), ty);
+        type_t *ty = declarator(&tok, tok, base_ty);
+        obj_t *var = new_lvar(get_ident(ty->name), ty);
 
-    if (!equal(tok, "="))
-      continue;
+        if (!equal(tok, "="))
+            continue;
 
-    node_t *lhs = new_var_node(var, ty->name);
-    node_t *rhs = assign(&tok, tok->next);
-    node_t *node = new_binary(ND_ASSIGN, lhs, rhs, tok);
+        node_t *lhs = new_var_node(var, ty->name);
+        node_t *rhs = assign(&tok, tok->next);
+        node_t *node = new_binary(ND_ASSIGN, lhs, rhs, tok);
 
-    // 这里把初始化语句当作一个表达式语句来处理，放在 ND_EXPR_STMT 节点中
-    cur = cur->next = new_unary(ND_EXPR_STMT, node, tok);
-  }
+        // 这里把初始化语句当作一个表达式语句来处理，放在 ND_EXPR_STMT
+        // 节点中
+        cur = cur->next = new_unary(ND_EXPR_STMT, node, tok);
+    }
 
-  // 多个声明语句（逗号分隔）被包装在一个 ND_BLOCK 节点中
-  node_t *node = new_node(ND_BLOCK, tok);
-  node->body = head.next;
-  *rest = tok->next;
-  return node;
+    // 多个声明语句（逗号分隔）被包装在一个 ND_BLOCK 节点中
+    node_t *node = new_node(ND_BLOCK, tok);
+    node->body = head.next;
+    *rest = tok->next;
+    return node;
 }
 
 // stmt := expr-stmt
@@ -214,7 +230,8 @@ static node_t *stmt(token_t **rest, token_t *tok)
 // compound-stmt := (declaration | stmt)* "}"
 static node_t *compound_stmt(token_t **rest, token_t *tok)
 {
-    node_t *node = new_node(ND_BLOCK, tok); // 我感觉第二个参数没有意义
+    node_t *node =
+        new_node(ND_BLOCK, tok);  // 我感觉第二个参数没有意义
     node_t head = {};
     node_t *cur = &head;
     while (!equal(tok, "}")) {
@@ -225,7 +242,6 @@ static node_t *compound_stmt(token_t **rest, token_t *tok)
         }
         add_type(cur);
     }
-    
 
     node->body = head.next;
     *rest = tok->next;
@@ -246,7 +262,8 @@ static node_t *expr_stmt(token_t **rest, token_t *tok)
         *rest = tok->next;
         return new_node(ND_BLOCK, tok);  // ; 等同于 {}
     }
-    node_t *node = new_node(ND_EXPR_STMT, tok); // 第二个参数的意义何在？
+    node_t *node =
+        new_node(ND_EXPR_STMT, tok);  // 第二个参数的意义何在？
     node->lhs = expr(&tok, tok);
     *rest = match_skip(tok, ";");
     return node;
@@ -263,7 +280,8 @@ static node_t *assign(token_t **rest, token_t *tok)
 {
     node_t *node = equality(&tok, tok);
     if (equal(tok, "="))
-        return new_binary(ND_ASSIGN, node, assign(rest, tok->next), tok);
+        return new_binary(ND_ASSIGN, node, assign(rest, tok->next),
+                          tok);
     *rest = tok;
     return node;
 }
@@ -297,14 +315,14 @@ static node_t *equality(token_t **rest, token_t *tok)
     for (;;) {
         token_t *start = tok;
         if (equal(tok, "==")) {
-            node =
-                new_binary(ND_EQ, node, relational(&tok, tok->next), tok);
+            node = new_binary(ND_EQ, node,
+                              relational(&tok, tok->next), tok);
             continue;
         }
 
         if (equal(tok, "!=")) {
-            node =
-                new_binary(ND_NE, node, relational(&tok, tok->next), tok);
+            node = new_binary(ND_NE, node,
+                              relational(&tok, tok->next), tok);
             continue;
         }
 
@@ -318,7 +336,7 @@ static node_t *equality(token_t **rest, token_t *tok)
 static node_t *relational(token_t **rest, token_t *tok)
 {
     node_t *node = add(&tok, tok);
-    
+
     for (;;) {
         token_t *start = tok;
         if (equal(tok, "<")) {
@@ -346,59 +364,59 @@ static node_t *relational(token_t **rest, token_t *tok)
     }
 }
 
+static node_t *new_add(node_t *lhs, node_t *rhs, token_t *tok)
+{
+    add_type(lhs);
+    add_type(rhs);
 
+    // num + num
+    if (is_integer(lhs->ty) && is_integer(rhs->ty))
+        return new_binary(ND_ADD, lhs, rhs, tok);
 
-static node_t *new_add(node_t *lhs, node_t *rhs, token_t *tok) {
-  add_type(lhs);
-  add_type(rhs);
+    if (lhs->ty->base && rhs->ty->base)  // 两个指针相加
+        error_tok(tok, "invalid operands");
 
-  // num + num
-  if (is_integer(lhs->ty) && is_integer(rhs->ty))
+    // Canonicalize `num + ptr` to `ptr + num`.
+    if (!lhs->ty->base && rhs->ty->base) {  // 交换 lhs 和 rhs
+        node_t *tmp = lhs;
+        lhs = rhs;
+        rhs = tmp;
+    }
+
+    // ptr + num
+    rhs = new_binary(ND_MUL, rhs, new_num(8, tok),
+                     tok);  // 这里认为指针指向的都是 8 字节的类型
     return new_binary(ND_ADD, lhs, rhs, tok);
-
-  if (lhs->ty->base && rhs->ty->base) // 两个指针相加
-    error_tok(tok, "invalid operands");
-
-  // Canonicalize `num + ptr` to `ptr + num`.
-  if (!lhs->ty->base && rhs->ty->base) { // 交换 lhs 和 rhs
-    node_t *tmp = lhs;
-    lhs = rhs;
-    rhs = tmp;
-  }
-
-  // ptr + num
-  rhs = new_binary(ND_MUL, rhs, new_num(8, tok), tok); // 这里认为指针指向的都是 8 字节的类型
-  return new_binary(ND_ADD, lhs, rhs, tok);
 }
 
 // Like `+`, `-` is overloaded for the pointer type.
-static node_t *new_sub(node_t *lhs, node_t *rhs, token_t *tok) {
-  add_type(lhs);
-  add_type(rhs);
-
-  // num - num
-  if (is_integer(lhs->ty) && is_integer(rhs->ty))
-    return new_binary(ND_SUB, lhs, rhs, tok);
-
-  // ptr - num
-  if (lhs->ty->base && is_integer(rhs->ty)) {
-    rhs = new_binary(ND_MUL, rhs, new_num(8, tok), tok);
+static node_t *new_sub(node_t *lhs, node_t *rhs, token_t *tok)
+{
+    add_type(lhs);
     add_type(rhs);
-    node_t *node = new_binary(ND_SUB, lhs, rhs, tok);
-    node->ty = lhs->ty;
-    return node;
-  }
 
-  // ptr - ptr, which returns how many elements are between the two.
-  if (lhs->ty->base && rhs->ty->base) {
-    node_t *node = new_binary(ND_SUB, lhs, rhs, tok);
-    node->ty = ty_int;
-    return new_binary(ND_DIV, node, new_num(8, tok), tok);
-  }
+    // num - num
+    if (is_integer(lhs->ty) && is_integer(rhs->ty))
+        return new_binary(ND_SUB, lhs, rhs, tok);
 
-  error_tok(tok, "invalid operands");
+    // ptr - num
+    if (lhs->ty->base && is_integer(rhs->ty)) {
+        rhs = new_binary(ND_MUL, rhs, new_num(8, tok), tok);
+        add_type(rhs);
+        node_t *node = new_binary(ND_SUB, lhs, rhs, tok);
+        node->ty = lhs->ty;
+        return node;
+    }
+
+    // ptr - ptr, which returns how many elements are between the two.
+    if (lhs->ty->base && rhs->ty->base) {
+        node_t *node = new_binary(ND_SUB, lhs, rhs, tok);
+        node->ty = ty_int;
+        return new_binary(ND_DIV, node, new_num(8, tok), tok);
+    }
+
+    error_tok(tok, "invalid operands");
 }
-
 
 // add := mul ("+" mul | "-" mul)*
 // mul 是乘性表达式
@@ -409,7 +427,7 @@ static node_t *add(token_t **rest, token_t *tok)
     for (;;) {
         token_t *start = tok;
         if (equal(tok, "+")) {
-            node =  new_add(node, mul(&tok, tok->next), tok);
+            node = new_add(node, mul(&tok, tok->next), tok);
             continue;
         }
 
@@ -431,16 +449,18 @@ static node_t *mul(token_t **rest, token_t *tok)
     for (;;) {
         token_t *start = tok;
         if (equal(tok, "*")) {
-            node = new_binary(ND_MUL, node, unary(&tok, tok->next), tok);
+            node =
+                new_binary(ND_MUL, node, unary(&tok, tok->next), tok);
             continue;
         }
 
         if (equal(tok, "/")) {
-            node = new_binary(ND_DIV, node, unary(&tok, tok->next), tok);
+            node =
+                new_binary(ND_DIV, node, unary(&tok, tok->next), tok);
             continue;
         }
 
-        *rest = tok;    
+        *rest = tok;
         return node;
     }
 }
@@ -468,26 +488,27 @@ static node_t *unary(token_t **rest, token_t *tok)
     已经判断是 ident “(” 了
 */
 // funcall := ident "(" (assign ("," assign)*)? ")"
-static node_t *funcall(token_t **rest, token_t *tok) {
-  token_t *start = tok; // 函数名字
-  tok = tok->next->next; // 跳过 ident 和 "("
+static node_t *funcall(token_t **rest, token_t *tok)
+{
+    token_t *start = tok;   // 函数名字
+    tok = tok->next->next;  // 跳过 ident 和 "("
 
-  node_t head = {};
-  node_t *cur = &head;
+    node_t head = {};
+    node_t *cur = &head;
 
-  while (!equal(tok, ")")) {
-    // 收集 actural parameters
-    if (cur != &head) // 不是第一个参数，跳过逗号
-      tok = match_skip(tok, ",");
-    cur = cur->next = assign(&tok, tok);
-  }
+    while (!equal(tok, ")")) {
+        // 收集 actural parameters
+        if (cur != &head)  // 不是第一个参数，跳过逗号
+            tok = match_skip(tok, ",");
+        cur = cur->next = assign(&tok, tok);
+    }
 
-  *rest = match_skip(tok, ")");
+    *rest = match_skip(tok, ")");
 
-  node_t *node = new_node(ND_FUNCALL, start);
-  node->funcname = strndup(start->loc, start->len);
-  node->args = head.next;
-  return node;
+    node_t *node = new_node(ND_FUNCALL, start);
+    node->funcname = strndup(start->loc, start->len);
+    node->args = head.next;
+    return node;
 }
 
 // primary := "(" expr ")" | ident args? | num
@@ -521,12 +542,28 @@ static node_t *primary(token_t **rest, token_t *tok)
     error_tok(tok, "expected an expression");
 }
 
-// program := { compound-stmt
+// function := declspec declarator  "{" compound-stmt
+
+static function_t *function(token_t **rest, token_t *tok)
+{
+    type_t *ty = declspec(&tok, tok);
+    ty = declarator(&tok, tok, ty);
+    g_locals = NULL;
+    function_t *fn = calloc(1, sizeof(function_t));
+    fn->name = get_ident(ty->name);
+    tok = match_skip(tok, "{");
+    fn->body = compound_stmt(rest, tok);
+    fn->locals = g_locals;
+    return fn;
+}
+
+// program := function*
 function_t *parse(token_t *tok)
 {
-    tok = match_skip(tok, "{");
-    function_t *prog = calloc(1, sizeof(function_t));
-    prog->body = compound_stmt(&tok, tok);
-    prog->locals = g_locals;
-    return prog;
+    function_t head = {};
+    function_t *cur = &head;
+
+    while (tok->kind != TK_EOF) 
+        cur = cur->next = function(&tok, tok);
+    return head.next;
 }

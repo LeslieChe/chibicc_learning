@@ -16,6 +16,7 @@ Interface）规定了函数调用的约定，
 如果函数有超过六个参数，剩余的参数会通过栈传递。
 */
 static char *arg_reg[] = {"%rdi", "%rsi", "%rdx", "%rcx", "%r8", "%r9"};
+static function_t *current_fn;
 static void gen_expr(node_t *node);
 static int count(void) {
   static int i = 1;
@@ -186,11 +187,12 @@ static void gen_stmt(node_t *node)
         }
 
         case ND_BLOCK:
-            for (node_t *n = node->body; n; n = n->next) gen_stmt(n);
+            for (node_t *n = node->body; n; n = n->next) 
+                gen_stmt(n);
             return;
         case ND_RETURN:
-            gen_expr(node->lhs);
-            printf("  jmp .L.return\n");
+            gen_expr(node->lhs);         
+            printf("  jmp .L.return.%s\n", current_fn->name);
             return;
         case ND_EXPR_STMT:
             gen_expr(node->lhs);
@@ -208,34 +210,42 @@ SysV AMD64 ABI 规定：调用 call 指令之前，rsp 必须是 16 的倍数。
 很多指令（例如 movdqa）要求对齐，或者至少性能更好。
 */
 // Assign offsets to local variables.
+
 static void assign_lvar_offsets(function_t *prog)
 {
-    int offset = 0;
-    for (obj_t *var = prog->locals; var; var = var->next) {
-        offset += 8;
-        var->offset = -offset;
+    for (function_t *fn = prog; fn; fn = fn->next) {
+        int offset = 0;
+        for (obj_t *var = fn->locals; var; var = var->next) {
+            offset += 8;
+            var->offset = -offset;
+        }
+        fn->stack_size = align_to(offset, 16);
     }
-    prog->stack_size = align_to(offset, 16);
 }
+
 
 void codegen(function_t *prog)
 {
-    if (!prog)
-        return;
-
     assign_lvar_offsets(prog);
-    printf("  .globl main\n");
-    printf("main:\n");
-    // Prologue
-    printf("  push %%rbp\n");
-    printf("  mov %%rsp, %%rbp\n");
-    printf("  sub $%d, %%rsp\n", prog->stack_size);
 
-    gen_stmt(prog->body);
-    assert(depth == 0);
+    for (function_t *fn = prog; fn; fn = fn->next) {
+        printf("  .globl %s\n", fn->name);
+        printf("%s:\n", fn->name);
+        current_fn = fn;
 
-    printf(".L.return:\n");
-    printf("  mov %%rbp, %%rsp\n");
-    printf("  pop %%rbp\n");
-    printf("  ret\n");  // 返回值在 %rax 中
+        // Prologue
+        printf("  push %%rbp\n");
+        printf("  mov %%rsp, %%rbp\n");
+        printf("  sub $%d, %%rsp\n", fn->stack_size);
+
+        // Emit code
+        gen_stmt(fn->body);
+        assert(depth == 0);
+
+        // Epilogue
+        printf(".L.return.%s:\n", fn->name);
+        printf("  mov %%rbp, %%rsp\n");
+        printf("  pop %%rbp\n");
+        printf("  ret\n");
+    }
 }
