@@ -3,7 +3,7 @@
 // All local variable instances created during parsing are
 // accumulated to this list.
 obj_t *g_locals;
-
+static type_t *declarator(token_t **rest, token_t *tok, type_t *ty);
 static node_t *compound_stmt(token_t **rest, token_t *tok);
 static node_t *expr_stmt(token_t **rest, token_t *tok);
 static node_t *expr(token_t **rest, token_t *tok);
@@ -92,14 +92,38 @@ static type_t *declspec(token_t **rest, token_t *tok)
     return ty_int;
 }
 
-// type-suffix := ("(" func-params)?
-// ty 是函数的返回值类型
-// 目前仅支持无参数函数的定义
+
+
+// 如果有（）则是函数类型，返回值类型是 ty
+// type-suffix := ("(" func-params? ")")?
+// func-params := param ("," param)*
+// param       := declspec declarator
+// 这里有个问题，形式参数是 param，但是它的产生式是 declspec declarator，
+// 也就是可以是函数类型的参数，然而 C 语言标准规定函数类型不能作为参数类型
 static type_t *type_suffix(token_t **rest, token_t *tok, type_t *ty)
 {
     if (equal(tok, "(")) {
-        *rest = match_skip(tok->next, ")");
-        return func_type(ty);
+        tok = tok->next;
+
+        type_t head = {};
+        type_t *cur = &head;
+
+        while (!equal(tok, ")")) {
+            if (cur != &head)
+                tok = match_skip(tok, ",");  // 第一个形式参数前面没有逗号
+            type_t *basety = declspec(&tok, tok);
+            type_t *ty = declarator(&tok, tok, basety);
+
+            // 为什么要 copy_type？
+            // 
+            // 暂时不懂
+            cur = cur->next = copy_type(ty);
+        }
+
+        ty = func_type(ty);
+        ty->params = head.next;
+        *rest = tok->next;
+        return ty;
     }
     *rest = tok;
     return ty;
@@ -108,7 +132,8 @@ static type_t *type_suffix(token_t **rest, token_t *tok, type_t *ty)
 // declarator = "*"* ident type-suffix
 static type_t *declarator(token_t **rest, token_t *tok, type_t *ty)
 {
-    while (consume(&tok, tok, "*")) ty = pointer_to(ty);
+    while (consume(&tok, tok, "*")) 
+        ty = pointer_to(ty);
 
     if (tok->kind != TK_IDENT)
         error_tok(tok, "expected a variable name");
@@ -542,8 +567,16 @@ static node_t *primary(token_t **rest, token_t *tok)
     error_tok(tok, "expected an expression");
 }
 
-// function := declspec declarator  "{" compound-stmt
 
+// 从右到左
+static void create_param_lvars(type_t *param) {
+  if (param) {
+    create_param_lvars(param->next);
+    new_lvar(get_ident(param->name), param);
+  }
+}
+
+// function := declspec declarator  "{" compound-stmt
 static function_t *function(token_t **rest, token_t *tok)
 {
     type_t *ty = declspec(&tok, tok);
@@ -551,6 +584,8 @@ static function_t *function(token_t **rest, token_t *tok)
     g_locals = NULL;
     function_t *fn = calloc(1, sizeof(function_t));
     fn->name = get_ident(ty->name);
+    create_param_lvars(ty->params);
+    fn->params = g_locals;
     tok = match_skip(tok, "{");
     fn->body = compound_stmt(rest, tok);
     fn->locals = g_locals;

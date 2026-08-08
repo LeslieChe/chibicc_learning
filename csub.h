@@ -111,6 +111,7 @@ typedef struct function
 {
     struct function *next;
     char *name;
+    obj_t *params; // 形参列表
     node_t *body;
     obj_t *locals;
     int stack_size;
@@ -137,14 +138,17 @@ struct type
 
     // Function type
     type_t *return_ty;
+    type_t *params; // 暂存函数的形参
+    type_t *next; // 形参构成链表
 };
 
 extern struct type *ty_int;
-
-bool is_integer(struct type *ty);
+type_t *copy_type(type_t *ty);
+bool is_integer(type_t *ty);
 type_t *pointer_to(type_t *base);
-void add_type(struct node *node);
+void add_type(node_t *node);
 type_t *func_type(type_t *return_ty);
+
 //
 // codegen.c
 //

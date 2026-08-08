@@ -238,6 +238,14 @@ void codegen(function_t *prog)
         printf("  mov %%rsp, %%rbp\n");
         printf("  sub $%d, %%rsp\n", fn->stack_size);
 
+        // Save passed-by-register arguments to the stack
+        // 把寄存器中的参数保存到栈中，方便后续使用
+        int i = 0;
+        // 这里形式参数不能超过 6 个，否则会越界！
+        for (obj_t *var = fn->params; var; var = var->next)
+            printf("  mov %s, %d(%%rbp)\n", arg_reg[i++],
+                   var->offset);
+
         // Emit code
         gen_stmt(fn->body);
         assert(depth == 0);

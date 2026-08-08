@@ -4,6 +4,12 @@ type_t *ty_int = &(type_t){TY_INT};
 
 bool is_integer(type_t *ty) { return ty->kind == TY_INT; }
 
+type_t *copy_type(type_t *ty) {
+  type_t *ret = calloc(1, sizeof(type_t));
+  *ret = *ty;
+  return ret;
+}
+
 type_t *pointer_to(type_t *base)
 {
     type_t *ty = calloc(1, sizeof(type_t));
