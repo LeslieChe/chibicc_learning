@@ -85,6 +85,12 @@ static char *get_ident(token_t *tok)
     return strndup(tok->loc, tok->len);
 }
 
+static int get_number(token_t *tok) {
+  if (tok->kind != TK_NUM)
+    error_tok(tok, "expected a number");
+  return tok->val;
+}
+
 // declspec = "int"
 static type_t *declspec(token_t **rest, token_t *tok)
 {
@@ -92,39 +98,45 @@ static type_t *declspec(token_t **rest, token_t *tok)
     return ty_int;
 }
 
+// func-params = (param ("," param)*)? ")"
+// param       = declspec declarator
+static type_t *func_params(token_t **rest, token_t *tok, type_t *ty)
+{
+    type_t head = {};
+    type_t *cur = &head;
+
+    while (!equal(tok, ")")) {
+        if (cur != &head)
+            tok = match_skip(tok, ",");  // 第一个形式参数前面没有逗号
+        type_t *basety = declspec(&tok, tok);
+        type_t *ty = declarator(&tok, tok, basety);
+        // 为什么要 copy_type？
+        //
+        // 暂时不懂
+        cur = cur->next = copy_type(ty);
+    }
+
+    ty = func_type(ty);
+    ty->params = head.next;
+    *rest = tok->next;
+    return ty;
+}
 
 
-// 如果有（）则是函数类型，返回值类型是 ty
-// type-suffix := ("(" func-params? ")")?
-// func-params := param ("," param)*
-// param       := declspec declarator
-// 这里有个问题，形式参数是 param，但是它的产生式是 declspec declarator，
-// 也就是可以是函数类型的参数，然而 C 语言标准规定函数类型不能作为参数类型
+// type-suffix = "(" func-params // 函数
+//             | "[" num "]"   // 数组
+//             | ε   // 变量
 static type_t *type_suffix(token_t **rest, token_t *tok, type_t *ty)
 {
-    if (equal(tok, "(")) {
-        tok = tok->next;
+    if (equal(tok, "("))
+        return func_params(rest, tok->next, ty);
 
-        type_t head = {};
-        type_t *cur = &head;
-
-        while (!equal(tok, ")")) {
-            if (cur != &head)
-                tok = match_skip(tok, ",");  // 第一个形式参数前面没有逗号
-            type_t *basety = declspec(&tok, tok);
-            type_t *ty = declarator(&tok, tok, basety);
-
-            // 为什么要 copy_type？
-            // 
-            // 暂时不懂
-            cur = cur->next = copy_type(ty);
-        }
-
-        ty = func_type(ty);
-        ty->params = head.next;
-        *rest = tok->next;
-        return ty;
+    if (equal(tok, "[")) {
+        int sz = get_number(tok->next);
+        *rest = match_skip(tok->next->next, "]");
+        return array_of(ty, sz);
     }
+
     *rest = tok;
     return ty;
 }
@@ -409,8 +421,10 @@ static node_t *new_add(node_t *lhs, node_t *rhs, token_t *tok)
     }
 
     // ptr + num
-    rhs = new_binary(ND_MUL, rhs, new_num(8, tok),
-                     tok);  // 这里认为指针指向的都是 8 字节的类型
+    // 这里的 rhs 是整数，lhs 是指针
+    // lhs 指向的类型是 lhs->ty->base
+    rhs = new_binary(ND_MUL, rhs, new_num(lhs->ty->base->size, tok), tok);
+   
     return new_binary(ND_ADD, lhs, rhs, tok);
 }
 
@@ -426,7 +440,7 @@ static node_t *new_sub(node_t *lhs, node_t *rhs, token_t *tok)
 
     // ptr - num
     if (lhs->ty->base && is_integer(rhs->ty)) {
-        rhs = new_binary(ND_MUL, rhs, new_num(8, tok), tok);
+        rhs = new_binary(ND_MUL, rhs, new_num(lhs->ty->base->size, tok), tok);
         add_type(rhs);
         node_t *node = new_binary(ND_SUB, lhs, rhs, tok);
         node->ty = lhs->ty;
@@ -437,7 +451,7 @@ static node_t *new_sub(node_t *lhs, node_t *rhs, token_t *tok)
     if (lhs->ty->base && rhs->ty->base) {
         node_t *node = new_binary(ND_SUB, lhs, rhs, tok);
         node->ty = ty_int;
-        return new_binary(ND_DIV, node, new_num(8, tok), tok);
+        return new_binary(ND_DIV, node, new_num(lhs->ty->base->size, tok), tok);
     }
 
     error_tok(tok, "invalid operands");

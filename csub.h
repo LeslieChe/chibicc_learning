@@ -127,27 +127,31 @@ typedef enum {
     TY_INT,
     TY_PTR,
     TY_FUNC,
+    TY_ARRAY,
 } type_kind_e;
 
 struct type
 {
     type_kind_e kind;
+    int size;      // sizeof() value
     struct type *base;
     // Declaration
     token_t *name;  // 暂存名字
-
+    // Array
+    int array_len;
     // Function type
     type_t *return_ty;
     type_t *params; // 暂存函数的形参
     type_t *next; // 形参构成链表
 };
-
+void print_type(type_t *ty);
 extern struct type *ty_int;
 type_t *copy_type(type_t *ty);
 bool is_integer(type_t *ty);
 type_t *pointer_to(type_t *base);
 void add_type(node_t *node);
 type_t *func_type(type_t *return_ty);
+type_t *array_of(type_t *base, int size);
 
 //
 // codegen.c
