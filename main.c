@@ -1,6 +1,6 @@
-#include "csub.h"
+#include "debug.h"
 
-// copy from 725bad
+
 // 一共 316 个提交
 int main(int argc, char **argv) {
   if (argc != 2)

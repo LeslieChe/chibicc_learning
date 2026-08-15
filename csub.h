@@ -94,6 +94,8 @@ typedef struct node
 
     obj_t *var;  // Used if kind == ND_VAR
     int val;     // Used if kind == ND_NUM
+
+    char *debug_info; // 用于调试输出
 } node_t;
 
 // Local variable

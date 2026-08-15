@@ -50,7 +50,7 @@ static void gen_addr(node_t *node)
         case ND_VAR:
             printf("  lea %d(%%rbp), %%rax\n", node->var->offset);
             return;
-        case ND_DEREF:
+        case ND_DEREF:  // &*x = x; &*抵消
             gen_expr(node->lhs);
             return;
     }
@@ -77,7 +77,7 @@ static void load(type_t *ty)
     printf("  mov (%%rax), %%rax\n");
 }
 
-// 出栈，得到一个地址，把 rax 的值存放到这个地址中
+// 地址在栈上，出栈，再把 rax 的值存放到这个地址中
 // Store %rax to an address that the stack top is pointing to.
 static void store(void)
 {
@@ -97,12 +97,14 @@ static void gen_expr(node_t *node)
             printf("  neg %%rax\n");
             return;
 
+        // 右值
         case ND_VAR: // 从内存中加载变量的值到寄存器 rax 中
             gen_addr(node); //  step1 把变量的地址加载到寄存器 rax 中
             load(node->ty); //  step2 把 rax 指向的值加载到 rax 中
+            // 如果 node->ty->kind == TY_ARRAY，则什么也不做，因为数组不能整体加载到寄存器中
             return;
 
-        case ND_DEREF: 
+        case ND_DEREF: // 右值
             gen_expr(node->lhs); // 得到一个地址在 rax 中
             load(node->ty); // 把 rax 指向的值加载到 rax 中
             return;
@@ -111,7 +113,7 @@ static void gen_expr(node_t *node)
             gen_addr(node->lhs);
             return;
 
-        case ND_ASSIGN:
+        case ND_ASSIGN:  // 对左值特殊处理
             gen_addr(node->lhs);
             push(); // 把左值的地址压栈
             gen_expr(node->rhs); // 右值的值加载到 rax 中

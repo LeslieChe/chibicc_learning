@@ -124,8 +124,10 @@ static type_t *func_params(token_t **rest, token_t *tok, type_t *ty)
 
 
 // type-suffix = "(" func-params // 函数
-//             | "[" num "]"   // 数组
-//             | ε   // 变量
+//             | "[" num "]"   type-suffix // 数组或多维数组
+//             | ε                          // 变量
+
+// int a[3][5];  // a 是一个数组，元素个数是 3，每个元素的类型是数组，数组的元素个数是 5，每个元素的类型是 int
 static type_t *type_suffix(token_t **rest, token_t *tok, type_t *ty)
 {
     if (equal(tok, "("))
@@ -133,7 +135,8 @@ static type_t *type_suffix(token_t **rest, token_t *tok, type_t *ty)
 
     if (equal(tok, "[")) {
         int sz = get_number(tok->next);
-        *rest = match_skip(tok->next->next, "]");
+        tok = match_skip(tok->next->next, "]");
+        ty = type_suffix(rest, tok, ty);  //递归，而且是从右到左
         return array_of(ty, sz);
     }
 
@@ -414,6 +417,7 @@ static node_t *new_add(node_t *lhs, node_t *rhs, token_t *tok)
         error_tok(tok, "invalid operands");
 
     // Canonicalize `num + ptr` to `ptr + num`.
+    // 这里不仅包括指针，也包括数组，因为数组类型的 ty->base 非空
     if (!lhs->ty->base && rhs->ty->base) {  // 交换 lhs 和 rhs
         node_t *tmp = lhs;
         lhs = rhs;
@@ -444,6 +448,7 @@ static node_t *new_sub(node_t *lhs, node_t *rhs, token_t *tok)
         add_type(rhs);
         node_t *node = new_binary(ND_SUB, lhs, rhs, tok);
         node->ty = lhs->ty;
+        node->debug_info = "lhs->ty";
         return node;
     }
 
@@ -451,6 +456,7 @@ static node_t *new_sub(node_t *lhs, node_t *rhs, token_t *tok)
     if (lhs->ty->base && rhs->ty->base) {
         node_t *node = new_binary(ND_SUB, lhs, rhs, tok);
         node->ty = ty_int;
+        node->debug_info = "ty_int";
         return new_binary(ND_DIV, node, new_num(lhs->ty->base->size, tok), tok);
     }
 

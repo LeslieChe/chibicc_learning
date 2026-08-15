@@ -1,4 +1,5 @@
 CFLAGS=-std=c11 -g -fno-common
+override CFLAGS += $(EXTRA_CFLAGS)
 SRCS=$(wildcard *.c)
 OBJS=$(SRCS:.c=.o)
 

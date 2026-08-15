@@ -65,12 +65,14 @@ void add_type(node_t *node)
         case ND_DIV:
         case ND_NEG:
             node->ty = node->lhs->ty;
+            node->debug_info = "lhs->ty";
             return;
         case ND_ASSIGN:
             if (node->lhs->ty->kind == TY_ARRAY)
                 // 数组类型不能作为左值
                 error_tok(node->lhs->tok, "not an lvalue");
             node->ty = node->lhs->ty;
+            node->debug_info = "lhs->ty";
             return;
         case ND_EQ:
         case ND_NE:
@@ -78,18 +80,25 @@ void add_type(node_t *node)
         case ND_LE:
         case ND_NUM:
         case ND_FUNCALL:  // 函数返回值是整型
+            node->debug_info = "ty_int";
             node->ty = ty_int;
             return;
         case ND_VAR:
             node->ty = node->var->ty;
+            node->debug_info = "var->ty";
             return;
         case ND_ADDR:
-            if (node->lhs->ty->kind == TY_ARRAY)
+            if (node->lhs->ty->kind == TY_ARRAY) {
                 // 这里不理解
                 // 对数组取地址，得到的是指向数组首元素的指针
                 node->ty = pointer_to(node->lhs->ty->base);
-            else
+                 node->debug_info = "pointer_to(node->lhs->ty->base)";
+            }
+            else{
                 node->ty = pointer_to(node->lhs->ty);
+                node->debug_info = "pointer_to(node->lhs->ty)";
+            }
+                
             return; 
         case ND_DEREF:
         // 对于指针和数组，node->lhs->ty->base 非空
@@ -99,51 +108,8 @@ void add_type(node_t *node)
             }
                
             node->ty = node->lhs->ty->base;
-
+             node->debug_info = "lhs->ty->base";
             return;
     }
 }
 
-
-// for debug
-
-void print_type(type_t *ty) {
-    if (!ty) {
-        printf("(null)");
-        return;
-    }
-
-    switch (ty->kind) {
-    case TY_INT:
-        printf("int");
-        break;
-    
-    case TY_PTR:
-        printf("ptr to ");
-        print_type(ty->base); // 递归打印指向的类型
-        break;
-
-    case TY_ARRAY:
-        printf("[%d]", ty->array_len);
-        printf(" element type: ");
-        print_type(ty->base);
-        break;
-
-    case TY_FUNC:
-        printf("func:");       
-        printf(" (");
-        for (type_t *param = ty->params; param; param = param->next) {
-            print_type(param);
-            if (param->next)
-                printf(", ");
-        }
-        printf(") ");
-        printf("return: ");
-        print_type(ty->return_ty);
-        break;
- 
-    default:
-        printf("unknown_type");
-    }
-    printf("\n");
-}
