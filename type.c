@@ -108,7 +108,7 @@ void add_type(node_t *node)
             }
                
             node->ty = node->lhs->ty->base;
-             node->debug_info = "lhs->ty->base";
+            node->debug_info = "lhs->ty->base";
             return;
     }
 }

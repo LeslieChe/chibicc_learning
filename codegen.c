@@ -71,9 +71,10 @@ static void load(type_t *ty)
         // the array. This is where "array is automatically converted
         // to a pointer to the first element of the array in C"
         // occurs.
+        // printf("  # array type, do nothing\n");
         return;
     }
-
+  //  printf("  # load value \n");
     printf("  mov (%%rax), %%rax\n");
 }
 
@@ -286,4 +287,12 @@ void codegen(function_t *prog)
         printf("  pop %%rbp\n");
         printf("  ret\n");
     }
+}
+
+void codegen_node(function_t *fn, node_t *node)
+{
+    assign_lvar_offsets(fn);
+    current_fn = fn;
+    gen_expr(node);
+    assert(depth == 0);
 }

@@ -160,3 +160,7 @@ type_t *array_of(type_t *base, int size);
 //
 
 void codegen(function_t *prog);
+void codegen_node(function_t *fn, node_t *node);
+void dump_function(function_t *fn);
+void dump_ast_tree(function_t *fn);
+void dump_ast_node(node_t *node, char *label);
