@@ -12,6 +12,7 @@ static node_t *equality(token_t **rest, token_t *tok);
 static node_t *relational(token_t **rest, token_t *tok);
 static node_t *add(token_t **rest, token_t *tok);
 static node_t *mul(token_t **rest, token_t *tok);
+static node_t *postfix(token_t **rest, token_t *tok);
 static node_t *unary(token_t **rest, token_t *tok);
 static node_t *primary(token_t **rest, token_t *tok);
 
@@ -511,7 +512,7 @@ static node_t *mul(token_t **rest, token_t *tok)
 }
 
 // unary = ("+" | "-" | "*" | "&") unary
-//       | primary
+//       | postfix
 static node_t *unary(token_t **rest, token_t *tok)
 {
     if (equal(tok, "+"))
@@ -526,9 +527,47 @@ static node_t *unary(token_t **rest, token_t *tok)
 
     if (equal(tok, "*"))
         return new_unary(ND_DEREF, unary(rest, tok->next), tok);
-    return primary(rest, tok);
+    return postfix(rest, tok);
 }
 
+
+// postfix = primary ("[" expr "]")*
+static node_t *postfix(token_t **rest, token_t *tok) {
+  node_t *node = primary(&tok, tok);
+
+  while (equal(tok, "[")) {
+    // x[y] is short for *(x+y)。
+    //
+    // C 标准规定 x[y] 与 *(x + y) 语义完全一致（甚至 y[x] 也合法），
+    // 所以编译器把下标语法统一翻译为「指针加法 + 解引用」，
+    // 后续语义分析和代码生成只需处理这一种形式。
+    //
+    // new_add(node, idx, start) 并不是简单的 ND_ADD：
+    // 它会调用 add_type 检查操作数类型，若 node 是指针或数组
+    // （ty->base 非空），说明这是指针算术，它会自动把下标 idx
+    // 乘以元素大小 base->size，构造出等价于
+    //   x + y * sizeof(元素类型)
+    // 的代码。数组名在表达式中会退化指向首元素的指针，因此数组
+    // 同样走指针加法路径。
+    //
+    // 最后外层 ND_DEREF 对 (x + y) 解引用，得到该地址上存储的值，
+    // 即 *(x + y)。
+    //
+    // start 记录的是 "[" 这个 token，作用是错误定位：
+    // 它被作为新建节点的 tok 字段传入（new_add 与 ND_DEREF 的
+    // 第三个参数）。当后续语义分析/代码生成出错时（例如 new_add
+    // 里的 error_tok(tok, "invalid operands")），能通过 node->tok
+    // 精确指向源码中的 "["。
+    // 如果不用 start，此刻 tok 已被 skip(tok, "]") 推进到 "]" 之后，
+    // 报错位置就会错位，无法定位到下标运算本身。
+    token_t *start = tok;
+    node_t *idx = expr(&tok, tok->next);
+    tok = match_skip(tok, "]");
+    node = new_unary(ND_DEREF, new_add(node, idx, start), start);
+  }
+  *rest = tok;
+  return node;
+}
 /*
     已经判断是 ident “(” 了
 */
