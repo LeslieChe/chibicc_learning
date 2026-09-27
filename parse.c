@@ -512,6 +512,7 @@ static node_t *mul(token_t **rest, token_t *tok)
 }
 
 // unary = ("+" | "-" | "*" | "&") unary
+//       | "sizeof" unary
 //       | postfix
 static node_t *unary(token_t **rest, token_t *tok)
 {
@@ -527,6 +528,17 @@ static node_t *unary(token_t **rest, token_t *tok)
 
     if (equal(tok, "*"))
         return new_unary(ND_DEREF, unary(rest, tok->next), tok);
+
+    /*
+        我觉得把 sizeof 的解析放在 unary 比较合适
+        因为 C 标准就是这么规定的
+     */
+    if (equal(tok, "sizeof")) {
+        node_t *node = unary(rest, tok->next);
+        add_type(node);
+        return new_num(node->ty->size, tok);
+    }
+
     return postfix(rest, tok);
 }
 
